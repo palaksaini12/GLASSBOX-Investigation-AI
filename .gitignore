@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+crime_data_db/
+node_modules/
+.next/
+.vercel/
+.env
+.env.local

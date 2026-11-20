@@ -1,0 +1,15 @@
+POLICE FIR & CRIME SCENE INSPECTION REPORT
+Case ID: CASE-2026-KID-07
+Date: 14 Nov 2026
+Location: Sector 14 Market, Gurugram, Haryana
+Complainant: Rajeev Verma (Phone: 9810011223)
+
+INCIDENT SUMMARY:
+At 06:40 PM on 14 Nov 2026, two minor boys, Aryan Verma and Kabir Mehta, were abducted from outside Sethi Electronics in Sector 14 Market, Gurugram by unidentified men in a white SUV.
+
+SHOP & STREET CCTV INSPECTION:
+1. Shop Name: Sethi Electronics & Mobile Repair
+2. Shop Owner: Ramesh Sethi (Phone: 9876543210), Resident of Gurugram.
+3. Street Survey: No other shop or pole on the entire lane of Sector 14 Market has an active CCTV camera. Sethi Electronics holds the only exterior camera covering the abduction spot, confirming careful prior planning by the kidnappers.
+4. DVR Forensic Finding: The DVR logs of Sethi Electronics show a 45-minute deletion gap between 06:15 PM and 07:00 PM on 14 Nov 2026. The footage was NOT lost due to a power cut; it was manually overwritten at 07:04 PM using the Shop Owner Admin PIN.
+5. Action Taken: Ramesh Sethi has been arrested as a prime suspect and his mobile device (9876543210) has been seized for WhatsApp and bank record extraction.

@@ -1,0 +1,6 @@
+Timestamp,Camera_ID,Zone,Status,Operator_ID,Event_Note,Location
+14-11-2026 07:35 PM,CAM-01,Main Reception Lobby,ACTIVE,SYSTEM,Normal guest check-ins recorded,Manesar
+14-11-2026 07:38 PM,CAM-02,Basement Parking Entry,ACTIVE,SYSTEM,White SUV entered basement; driver met Night Manager Manoj Tiwari,Manesar
+14-11-2026 07:40 PM,CAM-03,3rd Floor Corridor Room 304,OFFLINE_MANUAL,M_TIWARI,Camera manually switched to Maintenance Mode by Manoj Tiwari,Manesar
+14-11-2026 08:05 PM,CAM-03,3rd Floor Corridor Room 304,ACTIVE,M_TIWARI,Camera restored to active recording after 25 minute blackout,Manesar
+14-11-2026 08:10 PM,CAM-02,Basement Parking Entry,ACTIVE,SYSTEM,White SUV exited basement towards Delhi highway,Delhi

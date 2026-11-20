@@ -1,0 +1,5 @@
+Date,Time,Sender,Receiver,Phone_Linked,Amount_INR,Mode,Description,Location
+14-11-2026,05:30 PM,Manoj Tiwari,Ramesh Sethi,9876543210,150000,IMPS,AC and CCTV Repair Advance,Gurugram
+14-11-2026,07:45 PM,Vikram Rana,Hotel Royal Orchid Desk,9811223344,12000,CASH,Room 304 Two Night Stay (Fake Name Suresh Kumar),Manesar
+14-11-2026,08:15 PM,Vikram Rana,Manoj Tiwari,9910445566,75000,UPI,Private Event Booking Fee,Manesar
+14-11-2026,08:20 PM,Vikram Rana,Ramesh Sethi,9811223344,50000,IMPS,Balance Hardware Settlement,Delhi

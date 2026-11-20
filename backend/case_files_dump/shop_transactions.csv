@@ -1,0 +1,5 @@
+Date,Time,Account_Holder,Counterparty,Counterparty_Phone,Amount_INR,Type,Remark,Location
+12-11-2026,11:20 AM,Ramesh Sethi,City Electronics Wholesale,9811002233,18500,DEBIT,Mobile Parts Stock,Gurugram
+14-11-2026,05:30 PM,Ramesh Sethi,Manoj Tiwari (Hotel Royal Orchid),9910445566,150000,CREDIT,AC and CCTV Repair Advance,Manesar
+14-11-2026,06:05 PM,Ramesh Sethi,Local Cash Withdrawal ATM,9876543210,20000,DEBIT,ATM Withdrawal Sector 14,Gurugram
+14-11-2026,08:20 PM,Ramesh Sethi,Vikram Rana,9811223344,50000,CREDIT,Balance Hardware Settlement,Delhi
