@@ -297,6 +297,100 @@ const TRANSLATIONS = {
 // ============================================================================
 const INITIAL_CASES = [
   {
+    id: 'CASE #2026-KID-07',
+    title: 'Operation Blind Spot (LIVE AI)',
+    shortDesc: 'Hotel Royal Orchid Kidnapping, CCTV Blackout & Financial Trail',
+    category: 'Live Local GraphRAG • Neo4j + ChromaDB',
+    dateOpened: '14 Nov 2026',
+    status: 'Live Backend Connected',
+    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    voiceSample: 'How is shop owner Ramesh Sethi connected to Hotel Royal Orchid and Manoj Tiwari?',
+    summary:
+      'Live forensic investigation powered by local Ollama (llama3.2), ChromaDB vector search, and Neo4j Knowledge Graph. Ask any question in English, Hindi, Marathi, Tamil, or any regional language to cross-reference all 6 case evidence files.',
+    nextLeads: [
+      'Trace the INR 150,000 advance transferred from Manoj Tiwari to Ramesh Sethi prior to the CCTV blackout.',
+      'Investigate the INR 75,000 direct payout from prime kidnapper Vikram Rana to Night Manager Manoj Tiwari.',
+      'Cross-verify Room 304 and private service elevator access logs in hotel_details_report.txt.',
+      'Generate a formal Police Case Diary by asking GLASSBOX to draft a report.'
+    ],
+    evidence: [
+      { id: 'kid-1', name: 'hotel_details_report.txt', type: 'TXT', size: 'Live DB', status: 'indexed', nodeId: 'live-0' },
+      { id: 'kid-2', name: 'whatsapp_chats_ramesh.txt', type: 'TXT', size: 'Live DB', status: 'indexed', nodeId: 'live-0' },
+      { id: 'kid-3', name: 'hotel_transactions.csv', type: 'CSV', size: 'Live DB', status: 'indexed', nodeId: 'live-0' },
+      { id: 'kid-4', name: 'shop_transactions.csv', type: 'CSV', size: 'Live DB', status: 'indexed', nodeId: 'live-0' },
+      { id: 'kid-5', name: 'hotel_cctv_logs.csv', type: 'CSV', size: 'Live DB', status: 'indexed', nodeId: 'live-0' },
+      { id: 'kid-6', name: 'shop_details_and_fir.txt', type: 'TXT', size: 'Live DB', status: 'indexed', nodeId: 'live-0' }
+    ],
+    nodes: [
+      {
+        id: 'live-0',
+        label: 'Ramesh Sethi',
+        role: 'CCTV Technician / Shop Owner',
+        category: 'suspect',
+        risk: 'High Risk',
+        source: 'whatsapp_chats_ramesh.txt',
+        x: 115,
+        y: 120,
+        explanation: 'Received INR 150,000 advance from Manoj Tiwari. Loading live Neo4j graph connections...'
+      },
+      {
+        id: 'live-1',
+        label: 'Manoj Tiwari',
+        role: 'Duty Night Manager (9910445566)',
+        category: 'suspect',
+        risk: 'Critical Alert',
+        source: 'hotel_details_report.txt',
+        x: 300,
+        y: 85,
+        explanation: 'Connected to both Ramesh Sethi (INR 150,000) and Vikram Rana (INR 75,000).'
+      },
+      {
+        id: 'live-2',
+        label: 'Vikram Rana',
+        role: 'Prime Kidnapping Suspect',
+        category: 'anomaly',
+        risk: 'Critical Alert',
+        source: 'hotel_transactions.csv',
+        x: 470,
+        y: 165,
+        explanation: 'Prime suspect linked via financial transfers to Hotel Royal Orchid staff.'
+      },
+      {
+        id: 'live-3',
+        label: 'Hotel Royal Orchid',
+        role: 'Crime Scene Location (Manesar)',
+        category: 'evidence',
+        risk: 'Key Evidence',
+        source: 'hotel_cctv_logs.csv',
+        x: 290,
+        y: 255,
+        explanation: 'Location of kidnapping, Room 304, and suspicious CCTV blackout.'
+      }
+    ],
+    edges: [
+      { id: 'le-1', from: 'live-1', to: 'live-0', label: 'PAID_150K' },
+      { id: 'le-2', from: 'live-2', to: 'live-1', label: 'PAID_75K' },
+      { id: 'le-3', from: 'live-1', to: 'live-3', label: 'WORKS_AT' }
+    ],
+    messages: [
+      {
+        id: 'kid-m1',
+        sender: 'ai',
+        time: 'LIVE',
+        summary: 'GLASSBOX Live AI Brain Connected — Case #2026-KID-07 (Operation Blind Spot).',
+        bullets: [
+          'Connected to local FastAPI Backend (Ollama llama3.2 + ChromaDB + Neo4j Graph).',
+          'Ask any question in English, हिन्दी, मराठी, தமிழ், or any other language—GLASSBOX will run live Agentic Tools and cite real case files.'
+        ],
+        anomaly: null,
+        citations: [
+          { label: 'hotel_details_report.txt', nodeId: 'live-1' },
+          { label: 'whatsapp_chats_ramesh.txt', nodeId: 'live-0' }
+        ]
+      }
+    ]
+  },
+  {
     id: 'CASE #2026-CYB-04',
     title: 'The Phantom Ransomware',
     shortDesc: 'Hospital Insider Threat & Log Tampering',
@@ -1156,6 +1250,96 @@ export default function App() {
 useEffect(() => {
   setExportDate(new Date().toLocaleString());
 }, []);
+// Live Neo4j Knowledge Graph ko FastAPI (/api/graph) se load karna
+  useEffect(() => {
+    const loadLiveNeo4jGraph = async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:8000/api/graph');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.status !== 'success' || !Array.isArray(data.connections) || data.connections.length === 0) {
+          return;
+        }
+
+        const nodeMap = new Map();
+        const edgeList = [];
+
+        const mapCategory = (neoType) => {
+          const tUpper = (neoType || '').toLowerCase();
+          if (tUpper.includes('person')) return 'suspect';
+          if (tUpper.includes('phone')) return 'system';
+          if (tUpper.includes('location')) return 'evidence';
+          return 'anomaly';
+        };
+
+        data.connections.forEach((conn, idx) => {
+          if (!conn.source || !conn.target) return;
+
+          if (!nodeMap.has(conn.source)) {
+            nodeMap.set(conn.source, {
+              id: `neo-${nodeMap.size}`,
+              label: conn.source,
+              role: conn.source_type || 'Entity',
+              category: mapCategory(conn.source_type),
+              risk: conn.source_type === 'Person' ? 'High Risk' : 'Linked Entity',
+              source: conn.evidence_file || 'Neo4j GlassboxGraph',
+              explanation: `Extracted from live Neo4j Knowledge Graph via ${conn.evidence_file || 'case evidence'}.`
+            });
+          }
+
+          if (!nodeMap.has(conn.target)) {
+            nodeMap.set(conn.target, {
+              id: `neo-${nodeMap.size}`,
+              label: conn.target,
+              role: conn.target_type || 'Entity',
+              category: mapCategory(conn.target_type),
+              risk: conn.target_type === 'Person' ? 'High Risk' : 'Verified Artifact',
+              source: conn.evidence_file || 'Neo4j GlassboxGraph',
+              explanation: `Connected entity in live Neo4j Knowledge Graph (${conn.evidence_file || 'case evidence'}).`
+            });
+          }
+
+          const fromNode = nodeMap.get(conn.source);
+          const toNode = nodeMap.get(conn.target);
+          edgeList.push({
+            id: `neo-e-${idx}`,
+            from: fromNode.id,
+            to: toNode.id,
+            label: conn.relation || 'LINKED_TO'
+          });
+        });
+
+        // Nodes ko clean circular layout mein arrange karna taaki overlap na ho
+        const allNodes = Array.from(nodeMap.values());
+        const total = allNodes.length;
+        const laidOutNodes = allNodes.map((n, i) => {
+          const angle = (2 * Math.PI * i) / Math.max(total, 1) - Math.PI / 2;
+          const rx = total > 8 ? 215 : 185;
+          const ry = total > 8 ? 130 : 110;
+          return {
+            ...n,
+            x: Math.round(290 + rx * Math.cos(angle)),
+            y: Math.round(175 + ry * Math.sin(angle))
+          };
+        });
+
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === 'CASE #2026-KID-07'
+              ? { ...c, nodes: laidOutNodes, edges: edgeList }
+              : c
+          )
+        );
+        if (laidOutNodes.length > 0) {
+          setSelectedNodeId(laidOutNodes[0].id);
+        }
+      } catch {
+        // Agar backend server abhi off ho, toh fallback nodes screen par bane rahenge
+      }
+    };
+
+    loadLiveNeo4jGraph();
+  }, []);
   // Share Modal State (with SHA-256 Chain-of-Custody Audit Log)
   const [colleagueInput, setColleagueInput] = useState('');
   const [colleagueRole, setColleagueRole] = useState('View Only');
@@ -1293,10 +1477,13 @@ useEffect(() => {
     showToast(`Created ${newId}`);
   };
 
-  // Submit query to GLASSBOX AI
-  const handleSendMessage = (customText) => {
+  // Submit query to LIVE GLASSBOX FastAPI Backend (with fallback for demo cases)
+  const handleSendMessage = async (customText) => {
     const trimmed = (typeof customText === 'string' ? customText : inputText).trim();
     if (!trimmed || isAiThinking) return;
+
+    const currentCaseId = activeCase.id;
+    const currentCaseSnapshot = activeCase;
 
     const userMsg = {
       id: `u-${Date.now()}`,
@@ -1306,18 +1493,108 @@ useEffect(() => {
     };
 
     setCases((prev) =>
-      prev.map((c) => (c.id === activeCase.id ? { ...c, messages: [...c.messages, userMsg] } : c))
+      prev.map((c) => (c.id === currentCaseId ? { ...c, messages: [...c.messages, userMsg] } : c))
     );
     if (typeof customText !== 'string') setInputText('');
     setIsAiThinking(true);
 
-    setTimeout(() => {
-      const aiReply = generateMockAIResponse(trimmed, activeCase);
+    // Agar 3 purane demo cases mein se koi open hai, toh unka built-in demo response chalega
+    const isDemoCase = ['CASE #2026-CYB-04', 'CASE #2026-CYB-02', 'CASE #2026-FIN-09'].includes(currentCaseId);
+    if (isDemoCase) {
+      setTimeout(() => {
+        const aiReply = generateMockAIResponse(trimmed, currentCaseSnapshot);
+        setCases((prev) =>
+          prev.map((c) => (c.id === currentCaseId ? { ...c, messages: [...c.messages, aiReply] } : c))
+        );
+        setIsAiThinking(false);
+      }, 600);
+      return;
+    }
+
+    // LIVE CASE (CASE #2026-KID-07 & New Cases) -> FastAPI + Ollama + ChromaDB + Neo4j
+    try {
+      // UI mein hi/mr/ta select hai toh exact usi language mein jawab aayega;
+      // UI 'en' par hai toh 'auto' bhejne se English + koi bhi aur typed language (Punjabi, Bengali, etc.) sab chalengi!
+      const requestedLang = language === 'en' ? 'auto' : language;
+
+      const res = await fetch('http://127.0.0.1:8000/api/investigate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: trimmed,
+          language: requestedLang
+        })
+      });
+
+      if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+      const data = await res.json();
+
+      const rawText = (data.response || 'No response generated.').trim();
+      const cleanedLines = rawText
+        .split('\n')
+        .map((line) => line.replace(/^[\s*\-•]+/, '').trim())
+        .filter(Boolean);
+
+      const toolsList = Array.isArray(data.tools_used) && data.tools_used.length > 0
+        ? data.tools_used.join(' → ')
+        : 'search_evidence';
+
+      // AI ke jawab mein jo real case files mention hui hain, unhe clickable Citation Chips banao
+      const knownFiles = [
+        'hotel_details_report.txt',
+        'whatsapp_chats_ramesh.txt',
+        'hotel_transactions.csv',
+        'shop_transactions.csv',
+        'hotel_cctv_logs.csv',
+        'shop_details_and_fir.txt'
+      ];
+      const matchedCitations = knownFiles
+        .filter((fname) => rawText.toLowerCase().includes(fname.toLowerCase()))
+        .map((fname) => {
+          const linkedNode = currentCaseSnapshot.nodes.find((n) =>
+            (n.source || '').toLowerCase().includes(fname.toLowerCase())
+          );
+          return {
+            label: fname,
+            nodeId: linkedNode?.id || currentCaseSnapshot.nodes[0]?.id
+          };
+        });
+
+      const aiReply = {
+        id: `ai-${Date.now()}`,
+        sender: 'ai',
+        time: getCurrentTimeStr(),
+        summary: `GLASSBOX Live AI (${(data.output_language || 'en').toUpperCase()} • Tools: ${toolsList})`,
+        bullets: cleanedLines.length > 0 ? cleanedLines : [rawText],
+        anomaly: null,
+        citations:
+          matchedCitations.length > 0
+            ? matchedCitations
+            : [{ label: 'ChromaDB + Neo4j Live Evidence', nodeId: currentCaseSnapshot.nodes[0]?.id }]
+      };
+
       setCases((prev) =>
-        prev.map((c) => (c.id === activeCase.id ? { ...c, messages: [...c.messages, aiReply] } : c))
+        prev.map((c) => (c.id === currentCaseId ? { ...c, messages: [...c.messages, aiReply] } : c))
       );
+    } catch (err) {
+      const errorReply = {
+        id: `err-${Date.now()}`,
+        sender: 'ai',
+        time: getCurrentTimeStr(),
+        summary: 'Backend AI Brain is currently offline.',
+        bullets: [
+          'Start your FastAPI backend in the backend folder terminal: uvicorn main:app --reload',
+          'Also confirm Neo4j Desktop (GlassboxGraph) is RUNNING.'
+        ],
+        anomaly: `Connection Error: ${err.message}`,
+        citations: []
+      };
+      setCases((prev) =>
+        prev.map((c) => (c.id === currentCaseId ? { ...c, messages: [...c.messages, errorReply] } : c))
+      );
+    } finally {
       setIsAiThinking(false);
-    }, 600);
+    }
   };
 
   // Click citation chip -> focus Graph-RAG node
