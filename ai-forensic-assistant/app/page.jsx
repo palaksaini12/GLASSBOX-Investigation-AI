@@ -1,4 +1,5 @@
 "use client";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Globe,
@@ -1254,7 +1255,7 @@ useEffect(() => {
   useEffect(() => {
     const loadLiveNeo4jGraph = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/graph');
+        const res = await fetch(`${API_BASE_URL}/api/graph`);
         if (!res.ok) return;
         const data = await res.json();
         if (data.status !== 'success' || !Array.isArray(data.connections) || data.connections.length === 0) {
@@ -1517,7 +1518,7 @@ useEffect(() => {
       // UI 'en' par hai toh 'auto' bhejne se English + koi bhi aur typed language (Punjabi, Bengali, etc.) sab chalengi!
       const requestedLang = language === 'en' ? 'auto' : language;
 
-      const res = await fetch('http://127.0.0.1:8000/api/investigate', {
+      const res = await fetch(`${API_BASE_URL}/api/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

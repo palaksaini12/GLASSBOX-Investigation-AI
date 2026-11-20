@@ -1,34 +1,44 @@
+import os
 from neo4j import GraphDatabase
-from langchain_ollama import ChatOllama
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from deep_translator import GoogleTranslator
 from langdetect import detect
 
 # ==============================================================================
-# 1. LOCAL LLM SETUP (Ollama - Privacy First)
+# 1. HYBRID MODE DETECTION (Cloud = Groq API | Local Laptop = Offline Ollama)
 # ==============================================================================
-llm = ChatOllama(model="llama3.2", temperature=0.1)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
+IS_CLOUD_MODE = bool(GROQ_API_KEY)
+
+if IS_CLOUD_MODE:
+    from langchain_groq import ChatGroq
+    print("☁️ Cloud Mode Active: Using Groq Llama 3.3 + Lightweight File Search + Neo4j AuraDB")
+    llm = ChatGroq(
+        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        api_key=GROQ_API_KEY,
+        temperature=0.1,
+    )
+    retriever = None
+else:
+    from langchain_ollama import ChatOllama
+    from langchain_chroma import Chroma
+    from langchain_huggingface import HuggingFaceEmbeddings
+    print("💻 Local Air-Gapped Mode Active: Using Ollama (llama3.2) + ChromaDB + Local Neo4j")
+    llm = ChatOllama(model="llama3.2", temperature=0.1)
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vector_db = Chroma(
+        persist_directory="./crime_data_db",
+        embedding_function=embeddings,
+    )
+    retriever = vector_db.as_retriever(search_kwargs={"k": 6})
 
 # ==============================================================================
-# 2. CHROMADB VECTOR DATABASE LOAD KARNA (Member 2 ka saved data)
+# 2. NEO4J GRAPH CONNECTION (Local ya Cloud AuraDB automatically pick hoga)
 # ==============================================================================
-print("⏳ ChromaDB aur Embedding model load ho raha hai...")
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-vector_db = Chroma(
-    persist_directory="./crime_data_db",
-    embedding_function=embeddings
-)
-retriever = vector_db.as_retriever(search_kwargs={"k": 6})
-
-# ==============================================================================
-# 3. NEO4J GRAPH DATABASE CONNECTION (Member 2 ka GlassboxGraph)
-# ==============================================================================
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "password123"
+NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
 
 
 def query_neo4j(cypher_query: str, params: dict = None):
@@ -41,12 +51,92 @@ def query_neo4j(cypher_query: str, params: dict = None):
         driver.close()
 
 
+def ensure_graph_seeded():
+    """Agar Cloud AuraDB bilkul khali ho, toh Operation Blind Spot graph automatically seed kar deta hai."""
+    try:
+        check = query_neo4j("MATCH (n) RETURN count(n) AS cnt")
+        if check and check[0].get("cnt", 0) > 0:
+            return
+
+        seed_cypher = """
+        MERGE (ramesh:Person {name: 'Ramesh Sethi'})
+        MERGE (manoj:Person {name: 'Manoj Tiwari'})
+        MERGE (vikram:Person {name: 'Vikram Rana'})
+        MERGE (hotel:Location {name: 'Hotel Royal Orchid'})
+        MERGE (room:Location {name: 'Room 304'})
+        MERGE (shop:Location {name: 'Sethi Electronics Gurugram'})
+        MERGE (p_manoj:Phone {number: '9910445566'})
+        MERGE (p_ramesh:Phone {number: '9811223344'})
+
+        MERGE (manoj)-[:WORKS_AT {source: 'hotel_details_report.txt'}]->(hotel)
+        MERGE (manoj)-[:LINKED_TO_PHONE {source: 'hotel_details_report.txt'}]->(p_manoj)
+        MERGE (ramesh)-[:LINKED_TO_PHONE {source: 'whatsapp_chats_ramesh.txt'}]->(p_ramesh)
+        MERGE (ramesh)-[:OWNS_SHOP {source: 'shop_details_and_fir.txt'}]->(shop)
+        MERGE (manoj)-[:PAID_150K_ADVANCE {source: 'shop_transactions.csv'}]->(ramesh)
+        MERGE (vikram)-[:PAID_75K {source: 'hotel_transactions.csv'}]->(manoj)
+        MERGE (vikram)-[:MENTIONED_AT {source: 'hotel_details_report.txt'}]->(room)
+        MERGE (room)-[:LOCATED_IN {source: 'hotel_cctv_logs.csv'}]->(hotel)
+        MERGE (ramesh)-[:DISABLED_CCTV_AT {source: 'hotel_cctv_logs.csv'}]->(hotel)
+        """
+        query_neo4j(seed_cypher)
+        print("✅ Cloud Neo4j AuraDB automatically seeded with Operation Blind Spot graph!")
+    except Exception as e:
+        print(f"⚠️ Neo4j auto-seed skipped: {e}")
+
+
+# Startup par ek baar check karo
+ensure_graph_seeded()
+
+
+# ==============================================================================
+# 3. LIGHTWEIGHT EVIDENCE SEARCH (Cloud ke liye zero-RAM file reader)
+# ==============================================================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CASE_FILES_DIR = os.path.join(BASE_DIR, "case_files_dump")
+
+
+def cloud_search_case_files(query: str) -> str:
+    if not os.path.isdir(CASE_FILES_DIR):
+        return "Case evidence folder (case_files_dump) not found."
+
+    query_words = [w.lower() for w in query.split() if len(w) > 2]
+    scored_files = []
+
+    for fname in sorted(os.listdir(CASE_FILES_DIR)):
+        fpath = os.path.join(CASE_FILES_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read().strip()
+            lower_content = content.lower()
+            score = sum(lower_content.count(w) for w in query_words)
+            scored_files.append((score, fname, content))
+        except Exception:
+            continue
+
+    scored_files.sort(key=lambda x: x[0], reverse=True)
+    formatted = []
+    total_chars = 0
+    for i, (_, fname, content) in enumerate(scored_files, start=1):
+        snippet = content[:3000]
+        if total_chars + len(snippet) > 15000:
+            break
+        formatted.append(f"[Evidence {i} | Source File: {fname}]\n{snippet}")
+        total_chars += len(snippet)
+
+    return "\n\n---\n\n".join(formatted) if formatted else "No case files found."
+
+
 # ==============================================================================
 # 4. AGENTIC TOOLS (AI Brain ke 3 Hathiyar)
 # ==============================================================================
 @tool
 def search_evidence(query: str) -> str:
     """Searches the forensic database (FIR, WhatsApp chats, bank transactions, hotel & CCTV logs) for evidence matching the query."""
+    if IS_CLOUD_MODE or retriever is None:
+        return cloud_search_case_files(query)
+
     docs = retriever.invoke(query)
     if not docs:
         return "No relevant evidence found in the database."
@@ -63,31 +153,25 @@ def search_evidence(query: str) -> str:
 def analyze_suspect_network(person_name: str) -> str:
     """Finds a suspect's connected phone numbers, locations, and OTHER suspects linked through shared phones/locations in Neo4j."""
     cypher = """
-    MATCH (p:Person)-[r]->(target)
+    MATCH (p:Person)-[r]-(target)
     WHERE toLower(p.name) CONTAINS toLower($name)
-    OPTIONAL MATCH (other:Person)-[]->(target)
-    WHERE other <> p
     RETURN p.name AS person,
            type(r) AS relation,
            COALESCE(target.name, target.number) AS connected_to,
-           r.source AS source_file,
-           collect(DISTINCT other.name) AS shared_with
+           r.source AS source_file
     """
     try:
         records = query_neo4j(cypher, {"name": person_name})
         if not records:
             return f"No graph connections found for '{person_name}' in Neo4j."
 
-        lines = []
-        for rec in records:
-            shared = ", ".join(rec["shared_with"]) if rec["shared_with"] else "None"
-            lines.append(
-                f"- {rec['person']} --[{rec['relation']}]--> {rec['connected_to']} "
-                f"(Source: {rec['source_file']} | Shared with suspects: {shared})"
-            )
+        lines = [
+            f"- {rec['person']} --[{rec['relation']}]--> {rec['connected_to']} (Source: {rec['source_file']})"
+            for rec in records
+        ]
         return "\n".join(lines)
     except Exception as e:
-        return f"Neo4j connection error (Make sure GlassboxGraph is RUNNING): {e}"
+        return f"Neo4j connection error: {e}"
 
 
 @tool
@@ -111,7 +195,6 @@ tool_map = {
 
 
 def safe_invoke_tool(tool_name: str, tool_args) -> str:
-    """Safely executes a tool and auto-fixes argument names if llama3.2 formats them differently."""
     selected_tool = tool_map.get(tool_name)
     if not selected_tool:
         return f"Tool '{tool_name}' not found."
@@ -144,7 +227,7 @@ SYSTEM_PROMPT = (
     "RULES:\n"
     "1. Base your answer strictly on the retrieved evidence and tool outputs. NEVER invent facts.\n"
     "2. Include exact figures, timestamps, phone numbers, and roles (e.g., INR 150000 advance, INR 75000 payment, Room 304, CCTV blackout).\n"
-    "3. Always cite the exact source file names (e.g., whatsapp_chats_ramesh.txt, shop_transactions.csv, hotel_details_report.txt, hotel_transactions.csv).\n"
+    "3. Always cite the exact source file names (e.g., whatsapp_chats_ramesh.txt, shop_transactions.csv, hotel_details_report.txt, hotel_transactions.csv, hotel_cctv_logs.csv, shop_details_and_fir.txt).\n"
     "4. Keep the answer clear, structured in bullet points, and directly focused on the user's question."
 )
 
@@ -152,12 +235,10 @@ SYSTEM_PROMPT = (
 def run_forensic_agent(english_query: str) -> dict:
     tools_used = []
 
-    # Step A: Hamesha pehle ChromaDB se real evidence nikalo
     print(f"🛠️ Agent calling tool: search_evidence({{'query': '{english_query}'}})")
     retrieved_evidence = search_evidence.invoke({"query": english_query})
     tools_used.append("search_evidence")
 
-    # Step B: Sirf tab draft_report tool do jab user report/diary maange
     wants_report = any(
         word in english_query.lower()
         for word in ["report", "diary", "draft", "fir", "case file", "formal"]
@@ -170,24 +251,20 @@ def run_forensic_agent(english_query: str) -> dict:
         HumanMessage(
             content=(
                 f"USER QUESTION: {english_query}\n\n"
-                f"=== RETRIEVED CASE EVIDENCE (FROM CHROMADB) ===\n"
+                f"=== RETRIEVED CASE EVIDENCE ===\n"
                 f"{retrieved_evidence}\n\n"
                 "Answer the question thoroughly using the evidence above and include exact source file citations. "
                 "You may call `analyze_suspect_network` if you need Neo4j graph links."
             )
-        )
+        ),
     ]
 
-    # Step C: Agentic reasoning loop
     for _ in range(3):
         ai_msg = active_llm.invoke(messages)
         messages.append(ai_msg)
 
         if not ai_msg.tool_calls:
-            return {
-                "answer": ai_msg.content,
-                "tools_used": tools_used
-            }
+            return {"answer": ai_msg.content, "tools_used": tools_used}
 
         for call in ai_msg.tool_calls:
             tool_name = call["name"]
@@ -196,15 +273,10 @@ def run_forensic_agent(english_query: str) -> dict:
             tools_used.append(tool_name)
 
             result = safe_invoke_tool(tool_name, tool_args)
-            messages.append(
-                ToolMessage(content=result, tool_call_id=call["id"])
-            )
+            messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
 
     final_msg = llm.invoke(messages)
-    return {
-        "answer": final_msg.content,
-        "tools_used": tools_used
-    }
+    return {"answer": final_msg.content, "tools_used": tools_used}
 
 
 # ==============================================================================
@@ -240,7 +312,6 @@ def normalize_lang(lang: str) -> str:
 
 
 def safe_translate(text: str, source_lang: str, target_lang: str) -> str:
-    """Pehle GoogleTranslator (all languages) try karega; fail hone par local Ollama fallback chalega."""
     if not text or source_lang == target_lang:
         return text
 
@@ -249,7 +320,7 @@ def safe_translate(text: str, source_lang: str, target_lang: str) -> str:
         if translated:
             return translated
     except Exception as e:
-        print(f"⚠️ GoogleTranslator failed ({e}), local Ollama fallback use ho raha hai...")
+        print(f"⚠️ GoogleTranslator failed ({e}), LLM fallback use ho raha hai...")
 
     target_name = CODE_TO_FULL_NAME.get(target_lang, target_lang)
     fallback_prompt = (
@@ -268,12 +339,8 @@ def process_user_query(user_input: str, target_language: str = "auto") -> dict:
         detected_lang = "en"
 
     requested_lang = normalize_lang(target_language)
-
-    # Agar UI se specific language aayi hai (jaise 'mr' ya 'ta'), toh wahi output language hogi;
-    # warna jo language user ne type ki hai wahi use hogi (kisi bhi language ke liye!)
     output_lang = detected_lang if requested_lang == "auto" else requested_lang
 
-    # Input agar English nahi hai, toh pehle English mein translate karke RAG/Neo4j par chalao
     if detected_lang != "en":
         english_query = safe_translate(user_input, "auto", "en")
     else:
@@ -283,7 +350,6 @@ def process_user_query(user_input: str, target_language: str = "auto") -> dict:
     agent_output = run_forensic_agent(english_query)
     english_answer = agent_output["answer"]
 
-    # Final answer ko target language mein convert karo
     if output_lang != "en":
         final_answer = safe_translate(english_answer, "en", output_lang)
     else:
@@ -293,16 +359,5 @@ def process_user_query(user_input: str, target_language: str = "auto") -> dict:
         "detected_language": detected_lang,
         "output_language": output_lang,
         "tools_used": agent_output["tools_used"],
-        "answer": final_answer
+        "answer": final_answer,
     }
-
-
-# ==============================================================================
-# DIRECT TERMINAL TEST
-# ==============================================================================
-if __name__ == "__main__":
-    print("\n🚀 GLASSBOX AI Brain Ready! Test query chal rahi hai...\n")
-    test_q = "How is shop owner Ramesh Sethi connected to Hotel Royal Orchid and Manoj Tiwari?"
-    output = process_user_query(test_q)
-    print("\n📌 Tools Used:", output["tools_used"])
-    print("\n🤖 GLASSBOX Answer:\n", output["answer"])
