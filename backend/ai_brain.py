@@ -15,7 +15,7 @@ if IS_CLOUD_MODE:
     from langchain_groq import ChatGroq
     print("☁️ Cloud Mode Active: Using Groq Llama 3.3 + Lightweight File Search + Neo4j AuraDB")
     llm = ChatGroq(
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         api_key=GROQ_API_KEY,
         temperature=0.1,
     )
