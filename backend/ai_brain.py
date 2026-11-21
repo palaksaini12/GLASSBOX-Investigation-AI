@@ -13,7 +13,7 @@ IS_CLOUD_MODE = bool(GROQ_API_KEY)
 
 if IS_CLOUD_MODE:
     from langchain_groq import ChatGroq
-    print("☁️ Cloud Mode Active: Using Groq Llama 3.3 + Lightweight File Search + Neo4j AuraDB")
+    print("Cloud Mode Active: Using Groq + Lightweight File Search + Neo4j AuraDB")
     llm = ChatGroq(
         model=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         api_key=GROQ_API_KEY,
@@ -24,7 +24,7 @@ else:
     from langchain_ollama import ChatOllama
     from langchain_chroma import Chroma
     from langchain_huggingface import HuggingFaceEmbeddings
-    print("💻 Local Air-Gapped Mode Active: Using Ollama (llama3.2) + ChromaDB + Local Neo4j")
+    print("Local Air-Gapped Mode Active: Using Ollama (llama3.2) + ChromaDB + Local Neo4j")
     llm = ChatOllama(model="llama3.2", temperature=0.1)
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vector_db = Chroma(
@@ -79,17 +79,16 @@ def ensure_graph_seeded():
         MERGE (ramesh)-[:DISABLED_CCTV_AT {source: 'hotel_cctv_logs.csv'}]->(hotel)
         """
         query_neo4j(seed_cypher)
-        print("✅ Cloud Neo4j AuraDB automatically seeded with Operation Blind Spot graph!")
+        print("Cloud Neo4j AuraDB automatically seeded with Operation Blind Spot graph!")
     except Exception as e:
-        print(f"⚠️ Neo4j auto-seed skipped: {e}")
+        print(f"Neo4j auto-seed skipped: {e}")
 
 
-# Startup par ek baar check karo
 ensure_graph_seeded()
 
 
 # ==============================================================================
-# 3. LIGHTWEIGHT EVIDENCE SEARCH (Cloud ke liye zero-RAM file reader)
+# 3. EVIDENCE SEARCH (Default Case + Dynamic Uploaded New Case Files)
 # ==============================================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CASE_FILES_DIR = os.path.join(BASE_DIR, "case_files_dump")
@@ -128,8 +127,37 @@ def cloud_search_case_files(query: str) -> str:
     return "\n\n---\n\n".join(formatted) if formatted else "No case files found."
 
 
+def format_uploaded_evidence(uploaded_evidence: list, query: str) -> str:
+    """Naye case mein upload ki gayi files ka asli text rank karke AI ke liye format karta hai."""
+    if not uploaded_evidence:
+        return ""
+
+    query_words = [w.lower() for w in query.split() if len(w) > 2]
+    scored = []
+    for item in uploaded_evidence:
+        fname = item.get("filename", "uploaded_file.txt")
+        content = (item.get("content") or "").strip()
+        if not content:
+            continue
+        lower_content = content.lower()
+        score = sum(lower_content.count(w) for w in query_words)
+        scored.append((score, fname, content))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    formatted = []
+    total_chars = 0
+    for i, (_, fname, content) in enumerate(scored, start=1):
+        snippet = content[:6000]
+        if total_chars + len(snippet) > 18000:
+            break
+        formatted.append(f"[Uploaded Evidence {i} | Source File: {fname}]\n{snippet}")
+        total_chars += len(snippet)
+
+    return "\n\n---\n\n".join(formatted)
+
+
 # ==============================================================================
-# 4. AGENTIC TOOLS (AI Brain ke 3 Hathiyar)
+# 4. AGENTIC TOOLS
 # ==============================================================================
 @tool
 def search_evidence(query: str) -> str:
@@ -179,7 +207,7 @@ def draft_report(findings: str) -> str:
     """Converts investigation findings into a formal Police Case Diary / Forensic Report format."""
     prompt = (
         "Convert the following investigation findings into a concise, formal Indian Police Case Diary "
-        "(Case ID: CASE-2026-KID-07) with headings: Incident Overview, Key Suspects & Roles, "
+        "with headings: Incident Overview, Key Suspects & Roles, "
         "Verified Evidence & Citations, and Recommended Next Action.\n\n"
         f"Findings:\n{findings}"
     )
@@ -219,35 +247,97 @@ def safe_invoke_tool(tool_name: str, tool_args) -> str:
 
 
 # ==============================================================================
-# 5. HYBRID GRAPHRAG + AGENTIC REASONING LOOP
+# 5. HYBRID GRAPHRAG + NEW CASE DYNAMIC INVESTIGATION LOOP
 # ==============================================================================
-SYSTEM_PROMPT = (
+DEFAULT_SYSTEM_PROMPT = (
     "You are GLASSBOX, an elite Digital Forensic Investigation Assistant for Case #2026-KID-07 (Operation Blind Spot). "
     "Carefully read ALL retrieved evidence files provided to you. "
     "RULES:\n"
     "1. Base your answer strictly on the retrieved evidence and tool outputs. NEVER invent facts.\n"
-    "2. Include exact figures, timestamps, phone numbers, and roles (e.g., INR 150000 advance, INR 75000 payment, Room 304, CCTV blackout).\n"
-    "3. Always cite the exact source file names (e.g., whatsapp_chats_ramesh.txt, shop_transactions.csv, hotel_details_report.txt, hotel_transactions.csv, hotel_cctv_logs.csv, shop_details_and_fir.txt).\n"
+    "2. Include exact figures, timestamps, phone numbers, and roles.\n"
+    "3. Always cite the exact source file names provided in the evidence headers.\n"
     "4. Keep the answer clear, structured in bullet points, and directly focused on the user's question."
 )
 
 
-def run_forensic_agent(english_query: str) -> dict:
+def run_forensic_agent(
+    english_query: str,
+    case_id: str = None,
+    case_title: str = None,
+    uploaded_evidence: list = None,
+) -> dict:
     tools_used = []
-
-    print(f"🛠️ Agent calling tool: search_evidence({{'query': '{english_query}'}})")
-    retrieved_evidence = search_evidence.invoke({"query": english_query})
-    tools_used.append("search_evidence")
+    uploaded_evidence = uploaded_evidence or []
+    is_default_case = (not case_id) or ("KID-07" in case_id.upper())
 
     wants_report = any(
         word in english_query.lower()
         for word in ["report", "diary", "draft", "fir", "case file", "formal"]
     )
+
+    # ---- NEW / CUSTOM CASE MODE ----
+    if not is_default_case:
+        formatted_uploads = format_uploaded_evidence(uploaded_evidence, english_query)
+        if not formatted_uploads:
+            return {
+                "answer": (
+                    f"No readable evidence files are uploaded in {case_id} yet.\n"
+                    "- Upload a .txt, .csv, .pdf, or .json evidence file in the left Evidence Vault first.\n"
+                    "- Once indexed, ask any question and GLASSBOX will investigate your uploaded files directly."
+                ),
+                "tools_used": ["uploaded_evidence_check"],
+            }
+
+        tools_used.append("analyze_uploaded_evidence")
+        file_names = ", ".join(item.get("filename", "file") for item in uploaded_evidence)
+        custom_system_prompt = (
+            f"You are GLASSBOX, an elite Digital Forensic Investigation Assistant investigating {case_id} ({case_title or 'New Investigation'}). "
+            "You MUST analyze ONLY the uploaded evidence files provided below. "
+            "DO NOT mention or mix any facts from other cases.\n"
+            "RULES:\n"
+            "1. Base every claim strictly on the uploaded evidence below. NEVER invent facts.\n"
+            "2. Highlight key suspects, dates, timestamps, amounts, phone numbers, locations, and anomalies found in the files.\n"
+            f"3. Always cite the exact uploaded source file names ({file_names}).\n"
+            "4. Keep the answer clear, structured in bullet points, and directly focused on the user's question."
+        )
+
+        messages = [
+            SystemMessage(content=custom_system_prompt),
+            HumanMessage(
+                content=(
+                    f"USER QUESTION: {english_query}\n\n"
+                    f"=== UPLOADED CASE EVIDENCE ({case_id}) ===\n"
+                    f"{formatted_uploads}\n\n"
+                    "Answer thoroughly using ONLY the uploaded evidence above and cite exact file names."
+                )
+            ),
+        ]
+
+        if wants_report:
+            tools_used.append("draft_report")
+            report_text = draft_report.invoke(
+                {"findings": f"Case: {case_id} ({case_title})\nQuestion: {english_query}\n\nEvidence:\n{formatted_uploads}"}
+            )
+            return {"answer": report_text, "tools_used": tools_used}
+
+        final_msg = llm.invoke(messages)
+        return {"answer": final_msg.content, "tools_used": tools_used}
+
+    # ---- DEFAULT CASE MODE (CASE #2026-KID-07: Operation Blind Spot) ----
+    retrieved_evidence = search_evidence.invoke({"query": english_query})
+    tools_used.append("search_evidence")
+
+    # Agar default case mein bhi extra file upload ki ho, toh use bhi saath mein padho
+    extra_uploads = format_uploaded_evidence(uploaded_evidence, english_query)
+    if extra_uploads:
+        tools_used.append("analyze_uploaded_evidence")
+        retrieved_evidence = f"{retrieved_evidence}\n\n---\n\n{extra_uploads}"
+
     active_tools = [analyze_suspect_network, draft_report] if wants_report else [analyze_suspect_network]
     active_llm = llm.bind_tools(active_tools)
 
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
+        SystemMessage(content=DEFAULT_SYSTEM_PROMPT),
         HumanMessage(
             content=(
                 f"USER QUESTION: {english_query}\n\n"
@@ -269,9 +359,7 @@ def run_forensic_agent(english_query: str) -> dict:
         for call in ai_msg.tool_calls:
             tool_name = call["name"]
             tool_args = call["args"]
-            print(f"🛠️ Agent calling tool: {tool_name}({tool_args})")
             tools_used.append(tool_name)
-
             result = safe_invoke_tool(tool_name, tool_args)
             messages.append(ToolMessage(content=result, tool_call_id=call["id"]))
 
@@ -280,7 +368,7 @@ def run_forensic_agent(english_query: str) -> dict:
 
 
 # ==============================================================================
-# 6. UNIVERSAL MULTILINGUAL LAYER (All Languages + UI Language Selector Sync)
+# 6. UNIVERSAL MULTILINGUAL LAYER
 # ==============================================================================
 LANGUAGE_MAP = {
     "auto": "auto",
@@ -320,7 +408,7 @@ def safe_translate(text: str, source_lang: str, target_lang: str) -> str:
         if translated:
             return translated
     except Exception as e:
-        print(f"⚠️ GoogleTranslator failed ({e}), LLM fallback use ho raha hai...")
+        print(f"GoogleTranslator failed ({e}), using LLM fallback...")
 
     target_name = CODE_TO_FULL_NAME.get(target_lang, target_lang)
     fallback_prompt = (
@@ -332,22 +420,38 @@ def safe_translate(text: str, source_lang: str, target_lang: str) -> str:
     return llm.invoke(fallback_prompt).content
 
 
-def process_user_query(user_input: str, target_language: str = "auto") -> dict:
-    try:
-        detected_lang = detect(user_input)
-    except Exception:
-        detected_lang = "en"
-
+def process_user_query(
+    user_input: str,
+    target_language: str = "auto",
+    case_id: str = None,
+    case_title: str = None,
+    uploaded_evidence: list = None,
+) -> dict:
+    cleaned_input = user_input.strip()
     requested_lang = normalize_lang(target_language)
+
+    # Short English words like "hi" / "hey" ko Swedish (sw) detect hone se rokna
+    if len(cleaned_input) < 15 and cleaned_input.isascii():
+        detected_lang = "en"
+    else:
+        try:
+            detected_lang = detect(cleaned_input)
+        except Exception:
+            detected_lang = "en"
+
     output_lang = detected_lang if requested_lang == "auto" else requested_lang
 
     if detected_lang != "en":
-        english_query = safe_translate(user_input, "auto", "en")
+        english_query = safe_translate(cleaned_input, "auto", "en")
     else:
-        english_query = user_input
+        english_query = cleaned_input
 
-    print(f"🧠 AI Brain thinking on: {english_query} (Input: {detected_lang} -> Output: {output_lang})")
-    agent_output = run_forensic_agent(english_query)
+    agent_output = run_forensic_agent(
+        english_query,
+        case_id=case_id,
+        case_title=case_title,
+        uploaded_evidence=uploaded_evidence,
+    )
     english_answer = agent_output["answer"]
 
     if output_lang != "en":

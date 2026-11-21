@@ -1629,12 +1629,14 @@ const [theme, setTheme] = useState("dark");
     showToast('Focused linked evidence entity in Graph-RAG');
   };
 
-  // Handle drag-and-drop or file-picker uploads (Indexing... -> Indexed in 1.5s + auto Graph node)
-  const processUploadedFiles = (fileList) => {
+ // Handle drag-and-drop or file-picker uploads with REAL text/PDF extraction
+  const processUploadedFiles = async (fileList) => {
     if (!fileList || fileList.length === 0) return;
     const filesArray = Array.from(fileList);
+    const targetCaseId = activeCase.id;
 
-    filesArray.forEach((file, index) => {
+    for (let index = 0; index < filesArray.length; index++) {
+      const file = filesArray[index];
       const ext = file.name.split('.').pop()?.toUpperCase() || 'FILE';
       const sizeStr =
         file.size < 1024 * 1024
@@ -1649,71 +1651,116 @@ const [theme, setTheme] = useState("dark");
         type: ext,
         size: sizeStr,
         status: 'indexing',
-        nodeId: newNodeId
+        nodeId: newNodeId,
+        content: ''
       };
 
       setCases((prev) =>
         prev.map((c) =>
-          c.id === activeCase.id ? { ...c, evidence: [newEvidence, ...c.evidence] } : c
+          c.id === targetCaseId ? { ...c, evidence: [newEvidence, ...c.evidence] } : c
         )
       );
-      showToast(`Indexing ${file.name}...`);
+      showToast(`Reading & indexing ${file.name}...`);
 
-      setTimeout(() => {
-        setCases((prev) =>
-          prev.map((c) => {
-            if (c.id !== activeCase.id) return c;
-            const anchorNode = c.nodes[0];
-            const shortName = file.name.length > 22 ? `${file.name.slice(0, 19)}...` : file.name;
-            const newNode = {
-              id: newNodeId,
-              label: shortName,
-              role: `Uploaded ${ext} Evidence`,
-              category: 'evidence',
-              risk: 'Key Evidence',
-              source: `${file.name} • Indexed`,
-              x: 185 + ((c.nodes.length * 70) % 260),
-              y: 115 + ((c.nodes.length * 52) % 165),
-              explanation: `Newly uploaded forensic artifact (${sizeStr}). Local OCR/text extraction and vector indexing completed offline with zero external network transfer.`
-            };
-            const newEdge = anchorNode
-              ? {
-                  id: `e-up-${Date.now()}-${index}`,
-                  from: newNodeId,
-                  to: anchorNode.id,
-                  label: 'CORRELATES_WITH'
-                }
-              : null;
+      let extractedText = '';
+      let extractNote = '';
 
-            const aiNotice = {
-              id: `sys-${Date.now()}-${index}`,
-              sender: 'ai',
-              time: getCurrentTimeStr(),
-              summary: `GLASSBOX Indexed New Evidence: ${file.name} (${sizeStr})`,
-              bullets: [
-                `Successfully parsed ${ext} file locally and linked a new evidence node into the active Knowledge Graph.`,
-                'You may now query entities, timelines, or anomalies contained inside this artifact.'
-              ],
-              anomaly: null,
-              citations: [{ label: `${file.name} • Indexed`, nodeId: newNodeId }]
-            };
-
-            return {
-              ...c,
-              evidence: c.evidence.map((ev) =>
-                ev.id === evId ? { ...ev, status: 'indexed' } : ev
-              ),
-              nodes: [...c.nodes, newNode],
-              edges: newEdge ? [...c.edges, newEdge] : c.edges,
-              messages: [...c.messages, aiNotice]
-            };
-          })
+      try {
+        const lowerName = file.name.toLowerCase();
+        const isPlainText = ['.txt', '.csv', '.json', '.md', '.log', '.xml'].some((e) =>
+          lowerName.endsWith(e)
         );
-        setSelectedNodeId(newNodeId);
-        showToast(`${file.name} indexed & connected in Graph-RAG`);
-      }, 1500);
-    });
-  };
+
+        if (isPlainText) {
+          extractedText = (await file.text()).trim().slice(0, 25000);
+        } else if (lowerName.endsWith('.pdf')) {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await fetch(`${API_BASE_URL}/api/extract-text`, {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'success' && data.text) {
+              extractedText = data.text.trim();
+            } else {
+              extractNote = data.message || 'Could not extract selectable text from this PDF.';
+            }
+          } else {
+            extractNote = `PDF extraction server returned status ${res.status}.`;
+          }
+        } else {
+          extractNote = `Format .${ext.toLowerCase()} stored as attachment. For AI text investigation, upload .txt, .csv, .pdf, or .json files.`;
+        }
+      } catch (err) {
+        extractNote = `Could not read file text: ${err.message}`;
+      }
+
+      setCases((prev) =>
+        prev.map((c) => {
+          if (c.id !== targetCaseId) return c;
+          const anchorNode = c.nodes[0];
+          const shortName = file.name.length > 22 ? `${file.name.slice(0, 19)}...` : file.name;
+          const newNode = {
+            id: newNodeId,
+            label: shortName,
+            role: `Uploaded ${ext} Evidence`,
+            category: 'evidence',
+            risk: 'Key Evidence',
+            source: `${file.name} • Indexed`,
+            x: 185 + ((c.nodes.length * 70) % 260),
+            y: 115 + ((c.nodes.length * 52) % 165),
+            explanation: extractedText
+              ? `Real content extracted (${extractedText.length} characters). Ready for live AI forensic investigation.`
+              : extractNote || `Uploaded artifact (${sizeStr}).`
+          };
+          const newEdge = anchorNode
+            ? {
+                id: `e-up-${Date.now()}-${index}`,
+                from: newNodeId,
+                to: anchorNode.id,
+                label: 'CORRELATES_WITH'
+              }
+            : null;
+
+          const aiNotice = {
+            id: `sys-${Date.now()}-${index}`,
+            sender: 'ai',
+            time: getCurrentTimeStr(),
+            summary: `GLASSBOX Indexed New Evidence: ${file.name} (${sizeStr})`,
+            bullets: extractedText
+              ? [
+                  `Extracted ${extractedText.length.toLocaleString()} characters of real text from ${file.name}.`,
+                  'You can now ask GLASSBOX AI any question about suspects, amounts, timelines, or anomalies inside this file.'
+                ]
+              : [
+                  extractNote || `File ${file.name} was attached, but no readable text was found.`,
+                  'For live AI investigation, upload text-based PDF, TXT, CSV, or JSON files.'
+                ],
+            anomaly: null,
+            citations: [{ label: `${file.name} • Indexed`, nodeId: newNodeId }]
+          };
+
+          return {
+            ...c,
+            evidence: c.evidence.map((ev) =>
+              ev.id === evId ? { ...ev, status: 'indexed', content: extractedText } : ev
+            ),
+            nodes: [...c.nodes, newNode],
+            edges: newEdge ? [...c.edges, newEdge] : c.edges,
+            messages: [...c.messages, aiNotice]
+          };
+        })
+      );
+      setSelectedNodeId(newNodeId);
+      showToast(
+        extractedText
+          ? `${file.name} ready for AI investigation!`
+          : `${file.name} attached (no readable text found)`
+      );
+    }
+  }; 
 
   const handleFileInputChange = (e) => {
     processUploadedFiles(e.target.files);
