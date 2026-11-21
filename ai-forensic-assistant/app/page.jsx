@@ -42,7 +42,9 @@ import {
   Info,
   FolderOpen,
   History,
-  Hash
+  Hash,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 // ============================================================================
@@ -1251,6 +1253,27 @@ export default function App() {
 useEffect(() => {
   setExportDate(new Date().toLocaleString());
 }, []);
+const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("glassbox-theme");
+    if (savedTheme === "light") {
+      setTheme("light");
+      document.documentElement.classList.add("light-theme");
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    if (theme === "dark") {
+      setTheme("light");
+      document.documentElement.classList.add("light-theme");
+      localStorage.setItem("glassbox-theme", "light");
+    } else {
+      setTheme("dark");
+      document.documentElement.classList.remove("light-theme");
+      localStorage.setItem("glassbox-theme", "dark");
+    }
+  };
 // Live Neo4j Knowledge Graph ko FastAPI (/api/graph) se load karna
   useEffect(() => {
     const loadLiveNeo4jGraph = async () => {
@@ -2034,6 +2057,24 @@ END OF OFFICIAL CASE DIARY — GLASSBOX - Investigation AI Assistant
               <PanelRightOpen className="w-4 h-4 text-[#3B82F6]" />
             )}
             <span>{showGraphPanel ? t.hideGraph : t.showGraph}</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to Light Theme" : "Switch to Dark Theme"}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1C2331] border border-[#30363D] text-slate-300 hover:bg-[#252E40] text-xs sm:text-sm font-medium transition cursor-pointer"
+          >
+            {theme === "dark" ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span>Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-sky-400" />
+                <span>Dark</span>
+              </>
+            )}
           </button>
         </div>
       </header>
